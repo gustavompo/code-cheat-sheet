@@ -1,7 +1,6 @@
 /**
  Queries Zendesk Search API to find and extract some specific fields
 **/
-
 import java.time.LocalDateTime
 
 import scala.concurrent.Await
@@ -20,9 +19,9 @@ import test.{ AppSpec, fakeApp }
 
 class TicketFixer extends FreeSpec with OneAppPerSuite with AppSpec with MustMatchers {
 
-  val ZENDESK_USER = "xxxmail@mail.com/token"
-  val ZENDESK_PASSWORD = ""
-  val CSV_FILE_PATH = "file.csv"
+  val ZENDESK_USER = "xx@xx.com/token"
+  val ZENDESK_PASSWORD = "xx"
+  val CSV_FILE_PATH = "/xx/dev/output.csv"
   val MINIMUM_VALID_JOBID = 90000000
   val MAXIMUM_VALID_JOBID = 180000000
 
@@ -41,8 +40,7 @@ class TicketFixer extends FreeSpec with OneAppPerSuite with AppSpec with MustMat
     "Extract jobID from description field" in {
       WsTestClient.withClient { client =>
         val initialUrl =
-          s"""https://company.zendesk.com/api/v2/search
-             |.json?query=fieldvalue:"XXXVALUEOFTHEFIELDXXXX"&sort_by=created_at&sort_order=desc""".stripMargin
+          s"""https://xx.zendesk.com/api/v2/search.json?query=fieldvalue:"assalto__roubo"&sort_by=created_at&sort_order=desc"""
         processPaginatedTickets(client, initialUrl)
       }
     }
@@ -63,13 +61,16 @@ class TicketFixer extends FreeSpec with OneAppPerSuite with AppSpec with MustMat
   def extractJobIdFromDescription(tickets: List[Ticket]): List[(Ticket, Long)] = {
     val jobIdRegEx = """[^\d]((\d{8,9}))[^\d]""".r
     tickets
-        .map { r => jobIdRegEx.findFirstMatchIn(r.description).map(x => (r, x.group(1).toLong)) }
-        .filter(i => i.nonEmpty && i.get._2 >= MINIMUM_VALID_JOBID && i.get._2 <= MAXIMUM_VALID_JOBID)
-        .map(_.get)
+        .map { r => (r, jobIdRegEx.findAllMatchIn(r.description).map(x => x.group(1).toLong)) }
+        .map(k => (k._1, k._2.filter(l => l >= MINIMUM_VALID_JOBID && l <= MAXIMUM_VALID_JOBID)))
+        .filter { case (_, jobids) => jobids.nonEmpty }
+        .map { case (ticket, jobids) => (ticket, jobids.toList.head) }
   }
 
   def saveToCsv(jobIdsAndTicket: List[(Ticket, Long)]): Unit = {
     jobIdsAndTicket.foreach { case (ticket, jobId) =>
+      if(extractExistingJobId(ticket).replaceAll("\"", "").toLong != jobId)
+        scala.tools.nsc.io.File(CSV_FILE_PATH+"2").appendAll(formatToCsv(ticket, jobId))
       scala.tools.nsc.io.File(CSV_FILE_PATH).appendAll(formatToCsv(ticket, jobId))
     }
   }
